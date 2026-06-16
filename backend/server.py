@@ -1,7 +1,7 @@
 from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from supabase import create_client, Client
 import os
 import logging
 from pathlib import Path
@@ -14,10 +14,11 @@ from datetime import datetime, timezone
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Supabase connection (replaces MongoDB)
+supabase: Client = create_client(
+    os.environ['https://jbagycnrrihqxxqauwsv.supabase.co'],
+    os.environ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpiYWd5Y25ycmlocXh4cWF1d3N2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTE4OTcxMiwiZXhwIjoyMDk2NzY1NzEyfQ.V7oAQdnoxEDXgiLHOLe7pzPw75-lEp7MiLNUAtSAj7I']
+)
 
 # Create the main app without a prefix
 app = FastAPI()
@@ -28,8 +29,8 @@ api_router = APIRouter(prefix="/api")
 
 # Define Models
 class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
+    model_config = ConfigDict(extra="ignore")
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -37,34 +38,47 @@ class StatusCheck(BaseModel):
 class StatusCheckCreate(BaseModel):
     client_name: str
 
-# Add your routes to the router instead of directly to app
+
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
+    status_obj = StatusCheck(**input.model_dump())
+
+    # Map model fields to Supabase table columns
+    doc = {
+        "id": status_obj.id,
+        "client_name": status_obj.client_name,
+        "created_at": status_obj.timestamp.isoformat(),
+    }
+
+    supabase.table("status_checks").insert(doc).execute()
     return status_obj
 
 @api_router.get("/status", response_model=List[StatusCheck])
 async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+    result = supabase.table("status_checks").select("*").limit(1000).execute()
+
+    checks = []
+    for row in result.data:
+        # Map created_at from Supabase back to timestamp for the model
+        raw_ts = row.get("created_at", "")
+        if isinstance(raw_ts, str):
+            raw_ts = raw_ts.replace("Z", "+00:00")
+            parsed_ts = datetime.fromisoformat(raw_ts)
+        else:
+            parsed_ts = datetime.now(timezone.utc)
+
+        checks.append(StatusCheck(
+            id=row["id"],
+            client_name=row["client_name"],
+            timestamp=parsed_ts,
+        ))
+
+    return checks
+
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -84,6 +98,4 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+# No shutdown hook needed — Supabase client doesn't hold open connections
