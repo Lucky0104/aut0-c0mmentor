@@ -16,8 +16,8 @@ load_dotenv(ROOT_DIR / '.env')
 
 # Supabase connection (replaces MongoDB)
 supabase: Client = create_client(
-    os.environ['https://jbagycnrrihqxxqauwsv.supabase.co'],
-    os.environ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpiYWd5Y25ycmlocXh4cWF1d3N2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTE4OTcxMiwiZXhwIjoyMDk2NzY1NzEyfQ.V7oAQdnoxEDXgiLHOLe7pzPw75-lEp7MiLNUAtSAj7I']
+    os.environ['SUPABASE_URL'],
+    os.environ['SUPABASE_SERVICE_KEY']
 )
 
 # Create the main app without a prefix
