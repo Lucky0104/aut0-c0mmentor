@@ -41,7 +41,10 @@
 
 ### What problem does it solve?
 
-Rather than spending days wiring together a React app, a Python API, a database, CORS middleware, environment variable management, process supervision, and a UI component library from scratch, this project gives you all of that working together — correctly configured — so you can start building features on day one.
+Built a lightweight automation system that replies to Instagram and Facebook campaign comments automatically.
+No need to spend hours responding manually or pay for expensive tools like ManyChat.
+It detects campaign-specific comments and sends the right replies in real time.
+Designed for marketers who want faster engagement, lead capture, and hands-free comment management.
 
 ---
 
